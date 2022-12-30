@@ -3,7 +3,7 @@
 
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.BorderPane?>
-<DialogPane prefHeight="400.0" prefWidth="600.0" xmlns="http://javafx.com/javafx/18"
+<DialogPane prefHeight="400.0" prefWidth="600.0" xmlns="http://javafx.com/javafx/17"
             xmlns:fx="http://javafx.com/fxml/1">
   <content>
     <BorderPane>
@@ -14,7 +14,7 @@
         <TableView fx:id="tvReservations" prefHeight="200.0" prefWidth="200.0" BorderPane.alignment="CENTER">
           <columns>
             <TableColumn fx:id="tcId" prefWidth="43.0" text="#" />
-            <TableColumn fx:id="tcReservationOn" prefWidth="143.0" text="Reservation On" />
+            <TableColumn fx:id="tcOwner" prefWidth="143.0" text="Owner" />
             <TableColumn fx:id="tcDate" prefWidth="91.0" text="Date" />
             <TableColumn fx:id="tcTime" prefWidth="87.0" text="Time" />
             <TableColumn fx:id="tcNrSeats" prefWidth="85.0" text="Nr. Seats" />

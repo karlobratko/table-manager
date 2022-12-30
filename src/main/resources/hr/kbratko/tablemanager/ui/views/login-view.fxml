@@ -4,7 +4,7 @@
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 <?import javafx.scene.text.*?>
-<VBox alignment="TOP_CENTER" prefHeight="400.0" prefWidth="600.0" spacing="20.0" xmlns="http://javafx.com/javafx/18"
+<VBox alignment="TOP_CENTER" prefHeight="400.0" prefWidth="600.0" spacing="20.0" xmlns="http://javafx.com/javafx/17"
       xmlns:fx="http://javafx.com/fxml/1" fx:controller="hr.kbratko.tablemanager.ui.controllers.LoginController">
   <padding>
     <Insets bottom="20.0" left="20.0" right="20.0" top="20.0" />
@@ -20,7 +20,7 @@
     </Label>
     <HBox alignment="CENTER" prefHeight="50.0" prefWidth="560.0">
       <children>
-        <Label prefHeight="20.0" prefWidth="82.0" text="Username:">
+        <Label prefHeight="20.0" prefWidth="82.0" text="Email:">
           <font>
             <Font size="14.0" />
           </font>
@@ -28,7 +28,7 @@
             <Insets right="20.0" />
           </HBox.margin>
         </Label>
-        <TextField text="kbratko" fx:id="tfUsername" prefHeight="25.0" prefWidth="250.0">
+        <TextField text="kbratko@racunarstvo.hr" fx:id="tfEmail" prefHeight="25.0" prefWidth="250.0">
           <font>
             <Font size="14.0" />
           </font>

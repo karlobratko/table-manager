@@ -1,54 +1,51 @@
 package hr.kbratko.tablemanager.ui;
 
+import hr.kbratko.tablemanager.ui.controllers.Controller;
 import hr.kbratko.tablemanager.ui.controllers.LoginController;
-import hr.kbratko.tablemanager.ui.models.FsReservationRepository;
-import hr.kbratko.tablemanager.ui.models.FsTableRepository;
-import hr.kbratko.tablemanager.ui.models.FsTableReservationRepository;
+import hr.kbratko.tablemanager.ui.infrastructure.Metadata;
+import java.io.IOException;
+import java.util.logging.Logger;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
 import org.jetbrains.annotations.NotNull;
-
-import java.io.IOException;
+//import java.util.Optional;
 
 public class TableManagerApplication extends Application {
   public static final String NAME = "Table Manager";
+  public static final Logger logger = Logger.getLogger(TableManagerApplication.class.getName());
 
-  @Override
-  public void start(@NotNull Stage stage) throws IOException {
-    FXMLLoader            loader     = new FXMLLoader(getClass().getResource("/hr/kbratko/tablemanager/ui/views/login-view.fxml"));
-    stage.setTitle(NAME);
-    stage.setScene(new Scene(loader.load(), 600, 400));
-    stage.show();
-    final LoginController controller = loader.getController();
-    controller.setStage(stage);
-  }
-
-  @Override
-  public void init() {
-    try {
-      FsTableRepository.getInstance().loadTables();
-      FsReservationRepository.getInstance().loadReservations();
-      FsTableReservationRepository.getInstance().loadTableReservations();
-    } catch (Exception exception) {
-      System.out.println(exception.getMessage());
-    }
-  }
+  private Metadata metadata;
 
   public static void main(String[] args) {
     launch();
   }
 
   @Override
+  public void start(@NotNull Stage stage) throws IOException {
+    logger.info("Starting client JavaFX application");
+
+    FXMLLoader loader = new FXMLLoader(getClass().getResource("/hr/kbratko/tablemanager/ui/views/login-view.fxml"));
+    stage.setTitle(NAME);
+    stage.setScene(new Scene(loader.load(), 600, 400));
+    stage.show();
+    final Controller controller = loader.<LoginController>getController();
+    controller.setStage(stage);
+    controller.setMetadata(metadata);
+  }
+
+  @Override
+  public void init() {
+    logger.info("Initializing client JavaFX application");
+
+    metadata = new Metadata(ProcessHandle.current().pid());
+    logger.info("PID: %d".formatted(metadata.getPid()));
+  }
+
+  @Override
   public void stop() {
-    try {
-      FsTableRepository.getInstance().saveTables();
-      FsReservationRepository.getInstance().saveReservations();
-      FsTableReservationRepository.getInstance().saveTableReservations();
-    } catch (IOException exception) {
-      System.out.println(exception.getMessage());
-    }
+    logger.info("Stopping client JavaFX application");
   }
 
 }

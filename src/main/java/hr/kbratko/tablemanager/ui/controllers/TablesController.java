@@ -1,99 +1,83 @@
 package hr.kbratko.tablemanager.ui.controllers;
 
+import hr.kbratko.tablemanager.repository.model.Reservation;
+import hr.kbratko.tablemanager.repository.model.Table;
+import hr.kbratko.tablemanager.repository.model.User;
+import hr.kbratko.tablemanager.server.infrastructure.RequestOperation;
+import hr.kbratko.tablemanager.server.infrastructure.ResponseStatus;
+import hr.kbratko.tablemanager.server.model.Request;
+import hr.kbratko.tablemanager.ui.dialogs.ChatDialog;
 import hr.kbratko.tablemanager.ui.dialogs.CreateReservationDialog;
 import hr.kbratko.tablemanager.ui.dialogs.CreateTableDialog;
 import hr.kbratko.tablemanager.ui.dialogs.TableReservationsDialog;
-import hr.kbratko.tablemanager.ui.models.*;
+import hr.kbratko.tablemanager.ui.infrastructure.Metadata;
+import hr.kbratko.tablemanager.ui.viewmodel.ReservationViewModel;
+import hr.kbratko.tablemanager.ui.viewmodel.TableViewModel;
 import hr.kbratko.tablemanager.utils.Alerts;
 import hr.kbratko.tablemanager.utils.Documentations;
+import hr.kbratko.tablemanager.utils.Requests;
+import hr.kbratko.tablemanager.utils.SpinnerValueFactories;
 import hr.kbratko.tablemanager.utils.Strings;
+import hr.kbratko.tablemanager.utils.Validations;
+import java.io.IOException;
+import java.net.SocketTimeoutException;
+import java.net.URL;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.Objects;
+import java.util.ResourceBundle;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javafx.application.Platform;
 import javafx.beans.value.ObservableValue;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.collections.transformation.SortedList;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
-import javafx.scene.control.*;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.ListCell;
+import javafx.scene.control.ListView;
+import javafx.scene.control.SelectionMode;
+import javafx.scene.control.Spinner;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
 import javafx.stage.Stage;
 import net.synedra.validatorfx.Validator;
 import org.jetbrains.annotations.NotNull;
-import org.kordamp.ikonli.fontawesome.FontAwesome;
-import org.kordamp.ikonli.javafx.FontIcon;
 
-import java.io.IOException;
-import java.util.Comparator;
-import java.util.Objects;
-import java.util.stream.Collectors;
+public class TablesController implements BusinessController<Table, TableViewModel> {
+  private static final Logger logger = Logger.getLogger(TablesController.class.getName());
+  private final Validator validator = new Validator();
+  private ObservableList<TableViewModel> tables;
 
-public class TablesController {
+  private Stage stage;
+  private Metadata metadata;
+  private User user;
+
   @FXML
-  private ListView<Table>  lvTables;
+  private ListView<TableViewModel> lvTables;
+
   @FXML
-  private TextField        tfId;
+  private TextField tfId;
+
   @FXML
-  private TextField        tfName;
+  private TextField tfName;
+
   @FXML
   private Spinner<Integer> spNrSeats;
-  @FXML
-  private TextArea         taDescription;
-  @FXML
-  private Button           btnSort;
-
-  private final Validator         _validator = new Validator();
-  private final SortedList<Table> _tables    = new SortedList<>(FsTableRepository.getInstance().getTables(),
-                                                                Comparator.comparing(Table::getNrSeats).reversed());
-
-  private Stage   _stage;
-  private boolean _sortAsc = false;
 
   @FXML
-  protected void initialize() {
-    initializeSpinner();
-    initializeListView();
-    initializeValidation();
-    initializeButton();
-  }
-
-  private void initializeValidation() {
-    _validator.createCheck()
-              .dependsOn("name", tfName.textProperty())
-              .withMethod(c -> {
-                if (Strings.isNullOrBlank(c.get("name")))
-                  c.error("Please fill name field");
-              }).decorates(tfName);
-  }
-
-  private void initializeSpinner() {
-    spNrSeats.setValueFactory(new SpinnerValueFactory.IntegerSpinnerValueFactory(1, 100, 1));
-  }
-
-  private void initializeListView() {
-    lvTables.setItems(_tables);
-    lvTables.getSelectionModel().selectedItemProperty().addListener(this::onSelectedItemChanged);
-    lvTables.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
-    if (!lvTables.getItems().isEmpty())
-      lvTables.getSelectionModel().selectFirst();
-  }
-
-  private void initializeButton() {
-    btnSort.setGraphic(FontIcon.of(FontAwesome.SORT_ASC));
-    btnSort.setOnAction(actionEvent -> {
-      _sortAsc = !_sortAsc;
-      btnSort.setGraphic(_sortAsc ? FontIcon.of(FontAwesome.SORT_DESC) : FontIcon.of(FontAwesome.SORT_ASC));
-      _tables.setComparator(_tables.getComparator().reversed());
-    });
-  }
-
+  private TextArea taDescription;
 
   @FXML
-  protected void onSelectedItemChanged(final ObservableValue<? extends Table> observableValue, final Table oldValue, final Table newValue) {
+  protected void onSelectedItemChanged(final ObservableValue<? extends TableViewModel> observableValue, final TableViewModel oldValue, final TableViewModel newValue) {
     if (Objects.nonNull(newValue)) {
-      final var table = lvTables.getSelectionModel().getSelectedItem();
-      if (Objects.nonNull(table)) {
-        tfId.setText(Integer.toString(table.getId()));
-        tfName.setText(table.getName());
-        spNrSeats.getValueFactory().setValue(table.getNrSeats());
-        taDescription.setText(table.getDescription());
+      final TableViewModel viewModel = lvTables.getSelectionModel().getSelectedItem();
+
+      if (Objects.nonNull(viewModel)) {
+        bindModel(viewModel);
       }
     }
   }
@@ -101,89 +85,141 @@ public class TablesController {
   @FXML
   protected void showRelatedReservations() {
     if (Objects.nonNull(lvTables.getSelectionModel().getSelectedItem()))
-      new TableReservationsDialog(_stage, lvTables.getSelectionModel().getSelectedItem()).showAndWait();
+      new TableReservationsDialog(stage, lvTables.getSelectionModel().getSelectedItem().getModel()).showAndWait();
   }
 
   @FXML
   protected void updateTableData() {
-    final var table = lvTables.getSelectionModel().getSelectedItem();
-    if (Objects.nonNull(table)) {
-      if (!_validator.validate()) {
-        Alerts.showError("Update Table", "Error while trying to update Table.", getValidationMessages());
+    final TableViewModel viewModel = lvTables.getSelectionModel().getSelectedItem();
+
+    if (Objects.nonNull(viewModel)) {
+      if (!validator.validate()) {
+        Alerts.showError("Update Table",
+          "Error while trying to update Table.",
+          Validations.getMessages(validator));
         return;
       }
 
-      table.setName(tfName.getText());
-      table.setNrSeats(spNrSeats.getValue());
-      table.setDescription(taDescription.getText());
+      final var model = viewModel.getModel();
+      model.setName(tfName.getText().trim());
+      model.setNrSeats(spNrSeats.getValue());
 
-      final var selectedIndex = lvTables.getSelectionModel().getSelectedIndex();
-      final var items         = lvTables.getItems();
-      lvTables.setItems(null);
-      lvTables.setItems(items);
-      lvTables.getSelectionModel().select(selectedIndex);
+      if (!Strings.isNullOrEmpty(taDescription.getText()))
+        model.setDescription(taDescription.getText().trim());
+
+      try {
+        final var response = Requests.send(
+          Request.of(
+            RequestOperation.UPDATE_TABLE,
+            model
+          )
+        );
+
+        if (response.getStatus() != ResponseStatus.OK_200) {
+          Alerts.showError(
+            "Error",
+            "Error while trying to update table",
+            response.getMessage()
+          );
+
+          return;
+        }
+
+        lvTables.refresh();
+      } catch (SocketTimeoutException e) {
+        logger.log(
+          Level.WARNING,
+          "Socket timed out after %d ms".formatted(Requests.DEFAULT_TIMEOUT),
+          e
+        );
+      } catch (IOException e) {
+        logger.log(
+          Level.WARNING,
+          "Could not connect to %s:%d".formatted(Requests.DEFAULT_HOST, Requests.DEFAULT_PORT),
+          e
+        );
+      } catch (ClassNotFoundException e) {
+        logger.log(
+          Level.SEVERE,
+          "Could not cast response object",
+          e
+        );
+      }
     }
-  }
-
-  private String getValidationMessages() {
-    return _validator.validationResultProperty().get().getMessages().stream().map(msg -> msg.getSeverity().toString() + ": " + msg.getText()).collect(Collectors.joining("\n"));
   }
 
   @FXML
   protected void deleteTable() {
-    final var table = lvTables.getSelectionModel().getSelectedItem();
-    if (Objects.nonNull(table)) showAlertAndDelete(table);
-  }
-
-  private void showAlertAndDelete(final @NotNull Table table) {
-    Alerts.showConfirmation("Delete Table",
-                            String.format("Delete item: %s?", table.getName()),
-                            "Are you sure? Press OK to confirm, or Cancel to Back out.")
-          .ifPresent(type -> {
-            if (type == ButtonType.OK) FsTableRepository.getInstance().removeTable(table);
-          });
+    final TableViewModel viewModel = lvTables.getSelectionModel().getSelectedItem();
+    if (Objects.nonNull(viewModel)) {
+      showAlertAndDelete(viewModel);
+    }
   }
 
   @FXML
   protected void createNewTable() {
-    new CreateTableDialog(_stage).showAndWait()
-                                 .ifPresent(result -> result.ifPresent(table -> {
-                                   FsTableRepository.getInstance().addTable(table);
-                                   lvTables.getSelectionModel().select(table);
-                                 }));
+    new CreateTableDialog(stage)
+      .showAndWait()
+      .ifPresent(result -> result
+        .ifPresent(table -> {
+          final TableViewModel viewModel = new TableViewModel(table);
+
+          tables.add(viewModel);
+          lvTables.getSelectionModel().select(viewModel);
+          lvTables.getFocusModel().focus(lvTables.getSelectionModel().getSelectedIndex());
+          lvTables.scrollTo(viewModel);
+        }));
   }
 
   @FXML
   protected void createNewReservation() {
-    new CreateReservationDialog(_stage).showAndWait()
-                                       .ifPresent(result -> result.ifPresent(model -> {
-                                         for (Table table : model.getRelatedTables())
-                                           FsTableReservationRepository.getInstance()
-                                                                       .addTableReservation(TableReservation.of(table.getId(),
-                                                                                                                model.getReservation().getId()));
-                                         FsReservationRepository.getInstance().addReservation(model.getReservation());
-                                         try {
-                                           final var loader = new FXMLLoader(Objects.requireNonNull(getClass().getResource("/hr/kbratko/tablemanager/ui/views/reservations-view.fxml")));
-                                           _stage.setScene(new Scene(loader.load()));
-                                           final ReservationsController controller = loader.getController();
-                                           controller.setStage(_stage);
-                                           controller.selectReservation(model.getReservation());
-                                         } catch (IOException e) {
-                                           e.printStackTrace();
-                                         }
-                                       }));
+    new CreateReservationDialog(stage)
+      .showAndWait()
+      .ifPresent(result -> result
+        .ifPresent(model -> {
+          try {
+            final var loader = new FXMLLoader(
+              Objects.requireNonNull(
+                getClass().getResource("/hr/kbratko/tablemanager/ui/views/reservations-view.fxml")
+              )
+            );
+            stage.setScene(new Scene(loader.load()));
+
+            final BusinessController<Reservation, ReservationViewModel> controller = loader.<ReservationsController>getController();
+            controller.setStage(stage);
+            controller.setMetadata(metadata);
+            controller.setUser(user);
+            controller.selectListModel(new ReservationViewModel(model));
+          } catch (IOException e) {
+            e.printStackTrace();
+          }
+        }));
+  }
+
+  @FXML
+  protected void openChat() {
+    new ChatDialog(stage, user).showAndWait();
   }
 
   @FXML
   protected void openReservationsWindow() {
     try {
-      final var loader = new FXMLLoader(Objects.requireNonNull(getClass().getResource("/hr/kbratko/tablemanager/ui/views/reservations-view.fxml")));
-      _stage.setScene(new Scene(loader.load())); final ReservationsController controller = loader.getController();
-      controller.setStage(_stage);
+      final var loader = new FXMLLoader(
+        Objects.requireNonNull(
+          getClass().getResource("/hr/kbratko/tablemanager/ui/views/reservations-view.fxml")
+        )
+      );
+      stage.setScene(new Scene(loader.load()));
+
+      final BusinessController<Reservation, ReservationViewModel> controller = loader.<ReservationsController>getController();
+      controller.setStage(stage);
+      controller.setMetadata(metadata);
+      controller.setUser(user);
     } catch (IOException e) {
       e.printStackTrace();
     }
   }
+
 
   @FXML
   protected void createDocumentation() {
@@ -191,19 +227,193 @@ public class TablesController {
       Documentations.generate(".", "documentation.html");
     } catch (IOException e) {
       Alerts.showError("Error",
-                       "Error while generating documentation",
-                       "Documentation could not be generated, could not access files");
+        "Error while generating documentation",
+        "Documentation could not be generated, could not access files");
     }
   }
 
   @FXML
-  protected void exitApplication() {Platform.exit();}
-
-  public void setStage(final @NotNull Stage stage) {
-    _stage = stage;
+  protected void exitApplication() {
+    Platform.exit();
   }
 
-  public void selectTable(Table table) {
-    lvTables.getSelectionModel().select(table);
+  @Override
+  public void initialize(final URL url, final ResourceBundle resourceBundle) {
+    initializeSpinner();
+    initializeData();
+    initializeListView();
+    initializeValidation();
+  }
+
+  private void initializeSpinner() {
+    spNrSeats.setValueFactory(SpinnerValueFactories.integer(1, 100, 1));
+    spNrSeats.setEditable(true);
+  }
+
+  @SuppressWarnings("unchecked")
+  private void initializeData() {
+    try {
+      final var response = Requests.send(
+        Request.of(
+          RequestOperation.GET_ALL_TABLES,
+          null
+        )
+      );
+
+      if (response.getStatus() != ResponseStatus.OK_200) {
+        Alerts.showError(
+          "Error",
+          "Error while trying to fetch all tables",
+          response.getMessage()
+        );
+
+        return;
+      }
+
+      tables =
+        FXCollections.observableArrayList(
+          ((Collection<Table>) response.getData())
+            .stream()
+            .map(TableViewModel::new)
+            .toList()
+        );
+    } catch (SocketTimeoutException e) {
+      logger.log(
+        Level.WARNING,
+        "Socket timed out after %d ms".formatted(Requests.DEFAULT_TIMEOUT),
+        e
+      );
+    } catch (IOException e) {
+      logger.log(
+        Level.WARNING,
+        "Could not connect to %s:%d".formatted(Requests.DEFAULT_HOST, Requests.DEFAULT_PORT),
+        e
+      );
+    } catch (ClassNotFoundException e) {
+      logger.log(
+        Level.SEVERE,
+        "Could not cast response object",
+        e
+      );
+    }
+  }
+
+  private void initializeListView() {
+    lvTables.setItems(
+      new SortedList<>(
+        tables,
+        Comparator.comparing((TableViewModel o) -> o.getModel().getNrSeats()).reversed()
+      )
+    );
+    lvTables.getSelectionModel().selectedItemProperty().addListener(this::onSelectedItemChanged);
+    lvTables.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
+    lvTables.setCellFactory(lv -> new ListCell<>() {
+      @Override
+      protected void updateItem(final TableViewModel viewModel, final boolean empty) {
+        super.updateItem(viewModel, empty);
+
+        setText(
+          !empty && Objects.nonNull(viewModel)
+            ? String.format("%s (%d)",
+            viewModel.getModel().getName(),
+            viewModel.getModel().getNrSeats())
+            : null
+        );
+      }
+    });
+
+    if (!lvTables.getItems().isEmpty())
+      lvTables.getSelectionModel().selectFirst();
+  }
+
+  private void initializeValidation() {
+    validator.createCheck()
+      .dependsOn("name", tfName.textProperty())
+      .withMethod(c -> {
+        if (Strings.isNullOrBlank(c.get("name")))
+          c.error("Please fill name field");
+      }).decorates(tfName);
+  }
+
+  private void showAlertAndDelete(final @NotNull TableViewModel viewModel) {
+    final var model = viewModel.getModel();
+
+    Alerts.showConfirmation(
+        "Delete Table",
+        String.format("Delete item: %s?", model.getName()),
+        "Are you sure? Press OK to confirm, or Cancel to back out."
+      )
+      .ifPresent(type -> {
+        if (type == ButtonType.OK) {
+          try {
+            final var response = Requests.send(
+              Request.of(
+                RequestOperation.DELETE_TABLE,
+                model
+              )
+            );
+
+            if (response.getStatus() != ResponseStatus.OK_200) {
+              Alerts.showError(
+                "Error",
+                "Error while trying to delete table",
+                response.getMessage()
+              );
+
+              return;
+            }
+
+            tables.remove(viewModel);
+          } catch (SocketTimeoutException e) {
+            logger.log(
+              Level.WARNING,
+              "Socket timed out after %d ms".formatted(Requests.DEFAULT_TIMEOUT),
+              e
+            );
+          } catch (IOException e) {
+            logger.log(
+              Level.WARNING,
+              "Could not connect to %s:%d".formatted(Requests.DEFAULT_HOST, Requests.DEFAULT_PORT),
+              e
+            );
+          } catch (ClassNotFoundException e) {
+            logger.log(
+              Level.SEVERE,
+              "Could not cast response object",
+              e
+            );
+          }
+        }
+      });
+  }
+
+  private void bindModel(final @NotNull TableViewModel viewModel) {
+    final var model = viewModel.getModel();
+    tfId.setText(Integer.toString(model.getId()));
+    tfName.setText(model.getName());
+    spNrSeats.getValueFactory().setValue(model.getNrSeats());
+    taDescription.setText(model.getDescription());
+  }
+
+  @Override
+  public void setStage(final @NotNull Stage stage) {
+    this.stage = stage;
+  }
+
+  @Override
+  public void setMetadata(final @NotNull Metadata metadata) {
+    this.metadata = metadata;
+  }
+
+  @Override
+  public void setUser(final @NotNull User user) {
+    this.user = user;
+  }
+
+  @Override
+  public void selectListModel(final @NotNull TableViewModel viewModel) {
+    lvTables.getSelectionModel().select(viewModel);
+    lvTables.getFocusModel().focus(lvTables.getSelectionModel().getSelectedIndex());
+    lvTables.scrollTo(viewModel);
   }
 }

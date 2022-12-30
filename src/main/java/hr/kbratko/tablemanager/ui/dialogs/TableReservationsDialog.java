@@ -1,6 +1,23 @@
 package hr.kbratko.tablemanager.ui.dialogs;
 
-import hr.kbratko.tablemanager.ui.models.*;
+import hr.kbratko.tablemanager.repository.ReservationRepository;
+import hr.kbratko.tablemanager.repository.TableReservationRepository;
+import hr.kbratko.tablemanager.repository.factory.ReservationRepositoryFactory;
+import hr.kbratko.tablemanager.repository.factory.TableReservationRepositoryFactory;
+import hr.kbratko.tablemanager.repository.model.Reservation;
+import hr.kbratko.tablemanager.repository.model.Table;
+import hr.kbratko.tablemanager.repository.model.TableReservation;
+import hr.kbratko.tablemanager.server.infrastructure.RequestOperation;
+import hr.kbratko.tablemanager.server.infrastructure.ResponseStatus;
+import hr.kbratko.tablemanager.server.model.Request;
+import hr.kbratko.tablemanager.ui.viewmodel.ReservationViewModel;
+import hr.kbratko.tablemanager.ui.viewmodel.TableViewModel;
+import hr.kbratko.tablemanager.utils.Alerts;
+import hr.kbratko.tablemanager.utils.Requests;
+import java.net.SocketTimeoutException;
+import java.util.Collection;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -9,7 +26,6 @@ import javafx.collections.transformation.SortedList;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.control.*;
-import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.paint.Color;
 import javafx.stage.Modality;
 import javafx.stage.Window;
@@ -25,39 +41,37 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class TableReservationsDialog extends Dialog<ButtonType> {
-  @FXML
-  private ListView<LocalDate>                 lvDates;
-  @FXML
-  private TableView<Reservation>              tvReservations;
-  @FXML
-  private TableColumn<Reservation, Integer>   tcId;
-  @FXML
-  private TableColumn<Reservation, String>    tcReservationOn;
-  @FXML
-  private TableColumn<Reservation, LocalDate> tcDate;
-  @FXML
-  private TableColumn<Reservation, LocalTime> tcTime;
-  @FXML
-  private TableColumn<Reservation, Integer>   tcNrSeats;
+  private static final Logger logger = Logger.getLogger(TableReservationsDialog.class.getName());
+  private final Table                      table;
 
-  private final Table                       _table;
-  private final ObservableList<Reservation> _reservations;
+  private ObservableList<ReservationViewModel> reservations;
+
+  @FXML
+  private ListView<LocalDate> lvDates;
+
+  @FXML
+  private TableView<ReservationViewModel> tvReservations;
+
+  @FXML
+  private TableColumn<ReservationViewModel, Integer> tcId;
+
+  @FXML
+  private TableColumn<ReservationViewModel, String> tcOwner;
+
+  @FXML
+  private TableColumn<ReservationViewModel, LocalDate> tcDate;
+
+  @FXML
+  private TableColumn<ReservationViewModel, LocalTime> tcTime;
+
+  @FXML
+  private TableColumn<ReservationViewModel, Integer> tcNrSeats;
 
 
   public TableReservationsDialog(Window owner, final @NotNull Table table) {
     try {
-      _table = table;
-      final int[] reservationIds = FsTableReservationRepository.getInstance()
-                                                               .getTableReservations()
-                                                               .stream()
-                                                               .filter(tr -> tr.getTableId() == _table.getId())
-                                                               .mapToInt(TableReservation::getReservationId)
-                                                               .toArray();
-      _reservations = FsReservationRepository.getInstance()
-                                             .getReservations()
-                                             .stream()
-                                             .filter(reservation -> Arrays.stream(reservationIds).anyMatch(id -> reservation.getId() == id))
-                                             .collect(Collectors.toCollection(FXCollections::observableArrayList));
+      this.table = table;
+
       FXMLLoader loader = new FXMLLoader();
       loader.setLocation(getClass().getResource("/hr/kbratko/tablemanager/ui/dialogs/table-reservations-dialog.fxml"));
       loader.setController(this);
@@ -71,6 +85,7 @@ public class TableReservationsDialog extends Dialog<ButtonType> {
       setTitle("Table Reservations");
       setDialogPane(dialogPane);
 
+      initializeData();
       initializeListView();
       initializeTableCells();
       initializeTableValues();
@@ -79,18 +94,73 @@ public class TableReservationsDialog extends Dialog<ButtonType> {
     }
   }
 
+  @SuppressWarnings("unchecked")
+  private void initializeData() {
+    try {
+      final var response = Requests.send(
+        Request.of(
+          RequestOperation.GET_ALL_RESERVATIONS_BY_TABLE_ID,
+          table.getId()
+        )
+      );
+
+      if (response.getStatus() != ResponseStatus.OK_200) {
+        Alerts.showError(
+          "Error",
+          "Error while trying to fetch all reservations of table",
+          response.getMessage()
+        );
+
+        return;
+      }
+
+      this.reservations =
+        FXCollections.observableArrayList(
+          ((Collection<Reservation>) response.getData())
+            .stream()
+            .map(ReservationViewModel::new)
+            .toList()
+        );
+    } catch (SocketTimeoutException e) {
+      logger.log(
+        Level.WARNING,
+        "Socket timed out after %d ms".formatted(Requests.DEFAULT_TIMEOUT),
+        e
+      );
+      this.close();
+    } catch (IOException e) {
+      logger.log(
+        Level.WARNING,
+        "Could not connect to %s:%d".formatted(Requests.DEFAULT_HOST, Requests.DEFAULT_PORT),
+        e
+      );
+      this.close();
+    } catch (ClassNotFoundException e) {
+      logger.log(
+        Level.SEVERE,
+        "Could not cast response object",
+        e
+      );
+      this.close();
+    }
+  }
+
   private void initializeListView() {
     lvDates.setItems(
       FXCollections.observableList(
-        _reservations.stream()
-                     .map(Reservation::getDate)
-                     .distinct()
-                     .sorted((o1, o2) -> -o1.compareTo(o2))
-                     .toList()));
+        reservations.stream()
+                    .map(viewModel -> viewModel.getModel().getDate())
+                    .distinct()
+                    .sorted((o1, o2) -> -o1.compareTo(o2))
+                    .toList()
+      )
+    );
     lvDates.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
     lvDates.getSelectionModel().selectedItemProperty().addListener(this::onSelectedItemChanged);
+
     if (!lvDates.getItems().isEmpty())
       lvDates.getSelectionModel().selectFirst();
+
     lvDates.setCellFactory(lv -> new ListCell<>() {
       @Override
       protected void updateItem(final LocalDate date, final boolean empty) {
@@ -105,13 +175,11 @@ public class TableReservationsDialog extends Dialog<ButtonType> {
           else if (date.isEqual(now)) {
             setTextFill(Color.RED);
             setText("Today");
-          }
-          else if (date.isBefore(now.plusDays(3)))
+          } else if (date.isBefore(now.plusDays(3)))
             setTextFill(Color.ORANGE);
           else
             setTextFill(Color.GREEN);
-        }
-        else {
+        } else {
           setText(null);
         }
       }
@@ -119,52 +187,24 @@ public class TableReservationsDialog extends Dialog<ButtonType> {
   }
 
   private void onSelectedItemChanged(final ObservableValue<? extends LocalDate> observableValue, final LocalDate oldValue, final LocalDate newValue) {
-    if (Objects.nonNull(newValue)) {
+    if (Objects.nonNull(newValue))
       initializeTableValues();
-    }
   }
 
   private void initializeTableCells() {
-    tcId.setCellValueFactory(new PropertyValueFactory<>("id"));
-    tcReservationOn.setCellValueFactory(new PropertyValueFactory<>("reservationOn"));
-    tcDate.setCellValueFactory(new PropertyValueFactory<>("date"));
-    tcTime.setCellValueFactory(new PropertyValueFactory<>("time"));
-    tcTime.setCellFactory(column -> new TableCell<>() {
-      @Override
-      protected void updateItem(LocalTime time, boolean empty) {
-        super.updateItem(time, empty);
-
-        if (Objects.isNull(time) || empty) {
-          setText(null);
-          setTextFill(Color.BLACK);
-        }
-        else {
-          setText(time.toString());
-
-          final var reservation = getTableView().getItems().get(getIndex());
-          if (reservation.getDate().isEqual(LocalDate.now())) {
-            if (time.isBefore(LocalTime.now()))
-              setTextFill(Color.BLACK);
-            else if (time.isBefore(LocalTime.now().plusMinutes(30)))
-              setTextFill(Color.RED);
-            else if (time.equals(LocalTime.now().plusHours(1).plusMinutes(30)))
-              setTextFill(Color.ORANGE);
-            else
-              setTextFill(Color.GREEN);
-          }
-          else
-            setTextFill(Color.BLACK);
-        }
-      }
-    });
-    tcNrSeats.setCellValueFactory(new PropertyValueFactory<>("nrSeats"));
+    tcId.setCellValueFactory(cell -> cell.getValue().idProperty().asObject());
+    tcOwner.setCellValueFactory(cell -> cell.getValue().ownerProperty());
+    tcDate.setCellValueFactory(cell -> cell.getValue().dateProperty());
+    tcTime.setCellValueFactory(cell -> cell.getValue().timeProperty());
+    tcNrSeats.setCellValueFactory(cell -> cell.getValue().nrSeatsProperty().asObject());
   }
 
   private void initializeTableValues() {
-    FilteredList<Reservation> filteredReservations = _reservations
-      .filtered(reservation -> reservation.getDate().isEqual(lvDates.getSelectionModel().getSelectedItem()));
-    SortedList<Reservation> sortedReservations = new SortedList<>(filteredReservations,
-                                                                  Comparator.comparing(Reservation::getTime));
+    FilteredList<ReservationViewModel> filteredReservations =
+      reservations.filtered(viewModel -> viewModel.getModel().getDate().isEqual(lvDates.getSelectionModel().getSelectedItem()));
+    SortedList<ReservationViewModel> sortedReservations =
+      new SortedList<>(filteredReservations,
+                       Comparator.comparing(o -> o.getModel().getDate()));
     tvReservations.setItems(sortedReservations);
     sortedReservations.comparatorProperty().bind(tvReservations.comparatorProperty());
   }

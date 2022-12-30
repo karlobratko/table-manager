@@ -34,5 +34,6 @@
     <orderEntry type="library" name="Maven: org.kordamp.ikonli:ikonli-core:12.3.1" level="project" />
     <orderEntry type="library" name="Maven: org.kordamp.ikonli:ikonli-typicons-pack:12.3.1" level="project" />
     <orderEntry type="library" name="Maven: org.kordamp.ikonli:ikonli-fontawesome-pack:12.3.1" level="project" />
+    <orderEntry type="library" name="Maven: com.sun.messaging.mq:fscontext:4.4.2" level="project" />
   </component>
 </module>
