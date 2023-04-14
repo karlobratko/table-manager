@@ -7,6 +7,7 @@ import hr.kbratko.tablemanager.utils.Sockets;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.naming.NamingException;
@@ -43,6 +44,18 @@ public class TableManagerApplicationServer {
       logger.log(Level.SEVERE, "Couldn't find configuration parameter", e);
     } catch (IOException e) {
       logger.log(Level.SEVERE, "Error while accessing configuration file", e);
+    }
+
+    pool.shutdown();
+    try {
+      if (!pool.awaitTermination(60, TimeUnit.SECONDS)) {
+        pool.shutdownNow();
+        if (!pool.awaitTermination(60, TimeUnit.SECONDS))
+          logger.warning("Pool did not terminate");
+      }
+    } catch (InterruptedException e) {
+      pool.shutdownNow();
+      Thread.currentThread().interrupt();
     }
   }
 }

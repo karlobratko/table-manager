@@ -5,18 +5,21 @@ import hr.kbratko.tablemanager.repository.TableRepository;
 import hr.kbratko.tablemanager.repository.TableReservationRepository;
 import hr.kbratko.tablemanager.repository.UserRepository;
 import hr.kbratko.tablemanager.repository.factory.ReservationRepositoryFactory;
+import hr.kbratko.tablemanager.repository.factory.TableHistoryRepositoryFactory;
 import hr.kbratko.tablemanager.repository.factory.TableRepositoryFactory;
 import hr.kbratko.tablemanager.repository.factory.TableReservationRepositoryFactory;
 import hr.kbratko.tablemanager.repository.factory.UserRepositoryFactory;
+import hr.kbratko.tablemanager.repository.history.HistoryAction;
+import hr.kbratko.tablemanager.repository.history.RwHistoryRepository;
 import hr.kbratko.tablemanager.repository.model.Reservation;
 import hr.kbratko.tablemanager.repository.model.Table;
+import hr.kbratko.tablemanager.repository.model.TableHistoryModel;
 import hr.kbratko.tablemanager.repository.model.TableReservation;
 import hr.kbratko.tablemanager.repository.model.User;
 import hr.kbratko.tablemanager.repository.model.UserType;
 import hr.kbratko.tablemanager.server.infrastructure.ResponseStatus;
 import hr.kbratko.tablemanager.server.model.Request;
 import hr.kbratko.tablemanager.server.model.Response;
-import hr.kbratko.tablemanager.ui.viewmodel.ReservationViewModel;
 import hr.kbratko.tablemanager.utils.Streams;
 import java.io.IOException;
 import java.net.Socket;
@@ -30,7 +33,6 @@ import java.util.concurrent.Callable;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
-import javafx.collections.FXCollections;
 
 public class RequestHandler implements Callable<Void> {
   private static final Logger logger = Logger.getLogger(RequestHandler.class.getName());
@@ -38,6 +40,7 @@ public class RequestHandler implements Callable<Void> {
   private static final TableRepository tableRepo = TableRepositoryFactory.getInstance();
   private static final ReservationRepository reservationRepo = ReservationRepositoryFactory.getInstance();
   private static final TableReservationRepository tableReservationRepo = TableReservationRepositoryFactory.getInstance();
+  private static final RwHistoryRepository<TableHistoryModel> tableHistoryRepository = TableHistoryRepositoryFactory.getInstance();
 
   private final Socket socket;
 
@@ -80,6 +83,7 @@ public class RequestHandler implements Callable<Void> {
         case UPDATE_RESERVATION -> updateReservation(request.getData());
         case DELETE_RESERVATION -> deleteReservation(request.getData());
         case CREATE_RESERVATION -> createReservation(request.getData());
+        case UNDO_TABLE_ACTION -> undoTableAction(request.getData());
       };
 
       final var out = Streams.objectOutput(Streams.bufferedOutput(socket.getOutputStream()));
@@ -185,6 +189,8 @@ public class RequestHandler implements Callable<Void> {
       );
 
     try {
+      final var oldTable = tableRepo.read(table.getId());
+
       final Integer updatedCount = tableRepo.update(table);
       if (updatedCount == 0)
         return Response.from(
@@ -194,6 +200,9 @@ public class RequestHandler implements Callable<Void> {
         );
 
       tableRepo.commit();
+
+      tableHistoryRepository.append(TableHistoryModel.of(HistoryAction.UPDATE, oldTable.orElse(null)));
+      tableHistoryRepository.append(TableHistoryModel.of(HistoryAction.UPDATE, table));
 
       return Response.from(
         ResponseStatus.OK_200,
@@ -228,6 +237,8 @@ public class RequestHandler implements Callable<Void> {
 
       tableRepo.commit();
 
+      tableHistoryRepository.append(TableHistoryModel.of(HistoryAction.DELETE, table));
+
       return Response.from(
         ResponseStatus.OK_200,
         "Table deleted successfully",
@@ -261,12 +272,15 @@ public class RequestHandler implements Callable<Void> {
 
       tableRepo.commit();
 
+      tableHistoryRepository.append(TableHistoryModel.of(HistoryAction.CREATE, table));
+
       return Response.from(
         ResponseStatus.OK_200,
         "Table created successfully",
         table
       );
     } catch (Exception e) {
+      logger.log(Level.SEVERE, "Internal server error", e);
       return Response.from(
         ResponseStatus.INTERNAL_SERVER_ERROR_500,
         "Internal server error",
@@ -564,6 +578,69 @@ public class RequestHandler implements Callable<Void> {
           .filter(reservation -> Arrays.stream(reservationIds).anyMatch(i -> reservation.getId() == i))
           .collect(Collectors.toSet())
       );
+    } catch (Exception e) {
+      return Response.from(
+        ResponseStatus.INTERNAL_SERVER_ERROR_500,
+        "Internal server error",
+        null
+      );
+    }
+  }
+
+  private Response undoTableAction(Object data) {
+    try {
+      final var optional = tableHistoryRepository.popLast();
+
+      if (optional.isEmpty())
+        return Response.from(
+          ResponseStatus.NO_CONTENT_204,
+          "No history",
+          null
+        );
+
+      final var history = optional.get();
+      return switch (history.getAction()) {
+        case CREATE -> {
+          tableRepo.delete(history.getTable());
+          tableRepo.commit();
+
+          yield Response.from(
+            ResponseStatus.OK_200,
+            "History returned",
+            TableHistoryModel.of(HistoryAction.DELETE, history.getTable())
+          );
+        }
+        case DELETE -> {
+          tableRepo.create(history.getTable());
+          tableRepo.commit();
+
+          yield Response.from(
+            ResponseStatus.OK_200,
+            "History returned",
+            TableHistoryModel.of(HistoryAction.CREATE, history.getTable())
+          );
+        }
+        case UPDATE -> {
+          final var updatedOptional = tableHistoryRepository.popLast();
+          if (updatedOptional.isEmpty())
+            yield Response.from(
+              ResponseStatus.NO_CONTENT_204,
+              "No history",
+              null
+            );
+
+          final var updated = updatedOptional.get();
+          tableRepo.update(updated.getTable());
+          tableRepo.commit();
+
+          yield Response.from(
+            ResponseStatus.OK_200,
+            "History returned",
+            TableHistoryModel.of(HistoryAction.UPDATE, updated.getTable())
+          );
+        }
+      };
+
     } catch (Exception e) {
       return Response.from(
         ResponseStatus.INTERNAL_SERVER_ERROR_500,

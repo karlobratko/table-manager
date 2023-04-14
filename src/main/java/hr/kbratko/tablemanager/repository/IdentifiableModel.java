@@ -18,7 +18,7 @@ public abstract class IdentifiableModel<K extends Comparable<K>> implements Iden
   protected IdentifiableModel(final K id) {this.id = id;}
 
   @Override
-  public @NotNull K getId() {return id;}
+  public K getId() {return id;}
 
   @Override
   public void setId(@NotNull final K id) {this.id = id;}

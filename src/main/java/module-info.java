@@ -13,11 +13,12 @@ module hr.kbratko.tablemanager {
   requires java.logging;
   requires java.rmi;
   requires java.naming;
+  requires java.xml;
 
   opens hr.kbratko.tablemanager.ui to javafx.fxml;
   opens hr.kbratko.tablemanager.ui.controllers to javafx.fxml;
   opens hr.kbratko.tablemanager.ui.dialogs to javafx.fxml;
-  
+
   exports hr.kbratko.tablemanager.ui;
   exports hr.kbratko.tablemanager.ui.controllers;
   exports hr.kbratko.tablemanager.ui.dialogs;
@@ -28,12 +29,14 @@ module hr.kbratko.tablemanager {
   exports hr.kbratko.tablemanager.repository.fs;
   exports hr.kbratko.tablemanager.repository.factory;
   exports hr.kbratko.tablemanager.repository.model;
+  exports hr.kbratko.tablemanager.repository.history;
+  exports hr.kbratko.tablemanager.repository.history.xml;
 
   exports hr.kbratko.tablemanager.server;
   exports hr.kbratko.tablemanager.server.model;
   exports hr.kbratko.tablemanager.server.infrastructure;
   exports hr.kbratko.tablemanager.server.callables;
-  
+
   exports hr.kbratko.tablemanager.utils;
   exports hr.kbratko.tablemanager.server.rmi;
 }

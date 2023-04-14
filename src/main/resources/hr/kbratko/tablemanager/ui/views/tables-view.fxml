@@ -29,6 +29,7 @@
                             <items>
                                 <MenuItem mnemonicParsing="false" onAction="#createNewTable" text="Table"/>
                                 <MenuItem mnemonicParsing="false" onAction="#createNewReservation" text="Reservation"/>
+                                <MenuItem mnemonicParsing="false" onAction="#undoLastAction" text="Undo"/>
                             </items>
                         </Menu>
                         <MenuItem mnemonicParsing="false" onAction="#exitApplication" text="Exit"/>

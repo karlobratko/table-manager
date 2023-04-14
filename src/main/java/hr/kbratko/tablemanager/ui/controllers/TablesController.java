@@ -2,6 +2,7 @@ package hr.kbratko.tablemanager.ui.controllers;
 
 import hr.kbratko.tablemanager.repository.model.Reservation;
 import hr.kbratko.tablemanager.repository.model.Table;
+import hr.kbratko.tablemanager.repository.model.TableHistoryModel;
 import hr.kbratko.tablemanager.repository.model.User;
 import hr.kbratko.tablemanager.server.infrastructure.RequestOperation;
 import hr.kbratko.tablemanager.server.infrastructure.ResponseStatus;
@@ -220,6 +221,69 @@ public class TablesController implements BusinessController<Table, TableViewMode
     }
   }
 
+  @FXML
+  protected void undoLastAction() {
+    try {
+      final var response = Requests.send(
+        Request.of(
+          RequestOperation.UNDO_TABLE_ACTION,
+          null
+        )
+      );
+
+      if (response.getStatus() == ResponseStatus.NO_CONTENT_204) {
+        Alerts.showInformation(
+          "Nothing to undo",
+          "Could not undo, because there is no history",
+          response.getMessage()
+        );
+
+        return;
+      }
+
+      final var history = (TableHistoryModel) response.getData();
+      switch (history.getAction()) {
+        case CREATE -> {
+          final TableViewModel viewModel = new TableViewModel(history.getTable());
+
+          tables.add(viewModel);
+          lvTables.getSelectionModel().select(viewModel);
+          lvTables.getFocusModel().focus(lvTables.getSelectionModel().getSelectedIndex());
+          lvTables.scrollTo(viewModel);
+        }
+        case DELETE -> {
+          tables.remove(new TableViewModel(history.getTable()));
+        }
+        case UPDATE -> {
+          final var newViewModel = new TableViewModel(history.getTable());
+          tables.removeIf(viewModel -> Objects.equals(viewModel.getModel(), history.getTable()));
+
+          tables.add(newViewModel);
+          lvTables.getSelectionModel().select(newViewModel);
+          lvTables.getFocusModel().focus(lvTables.getSelectionModel().getSelectedIndex());
+          lvTables.scrollTo(newViewModel);
+        }
+      }
+    } catch (SocketTimeoutException e) {
+      logger.log(
+        Level.WARNING,
+        "Socket timed out after %d ms".formatted(Requests.DEFAULT_TIMEOUT),
+        e
+      );
+    } catch (IOException e) {
+      logger.log(
+        Level.WARNING,
+        "Could not connect to %s:%d".formatted(Requests.DEFAULT_HOST, Requests.DEFAULT_PORT),
+        e
+      );
+    } catch (ClassNotFoundException e) {
+      logger.log(
+        Level.SEVERE,
+        "Could not cast response object",
+        e
+      );
+    }
+  }
 
   @FXML
   protected void createDocumentation() {
